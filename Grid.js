@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import Draggable from 'react-draggable';
+import { RotateCw } from 'lucide-react';
 import './grid.css';
 
-const Grid = ({ width, height, selectedFurniture }) => {
+const Grid = ({ width, height, selectedFurniture, furniturePositions, onFurnitureAdd, onFurnitureMove }) => {
   const [rows, setRows] = useState(Math.floor(height / 50));
   const [columns, setColumns] = useState(Math.floor(width / 50));
-  const [grid, setGrid] = useState(
-    Array(rows).fill(null).map(() => Array(columns).fill(null))
-  );
 
   useEffect(() => {
     const newRows = Math.floor(height / 50);
@@ -14,7 +13,6 @@ const Grid = ({ width, height, selectedFurniture }) => {
     
     setRows(newRows);
     setColumns(newColumns);
-    setGrid(Array(newRows).fill(null).map(() => Array(newColumns).fill(null)));
   }, [width, height]);
 
   const handleCellClick = (startRow, startCol) => {
@@ -23,76 +21,148 @@ const Grid = ({ width, height, selectedFurniture }) => {
     const { model_name, model_size, model_picture } = selectedFurniture;
     const [furnitureWidth, furnitureHeight] = model_size;
 
-    // Check if placing the furniture would go out of bounds
     if (startRow + furnitureHeight > rows || startCol + furnitureWidth > columns) {
       alert("This item can't be placed here as it exceeds grid bounds.");
       return;
     }
 
-    // Check if any of the cells are already occupied
-    for (let i = 0; i < furnitureHeight; i++) {
-      for (let j = 0; j < furnitureWidth; j++) {
-        if (grid[startRow + i][startCol + j]) {
-          alert("Some of these cells are already occupied!");
-          return;
-        }
-      }
+    if (isAreaOccupied(startRow, startCol, furnitureWidth, furnitureHeight)) {
+      alert("Some of these cells are already occupied!");
+      return;
     }
 
-    // Update the grid with the selected furniture
-    const newGrid = grid.map((r, rowIndex) =>
-      r.map((cell, colIndex) => {
-        if (
-          rowIndex >= startRow &&
-          rowIndex < startRow + furnitureHeight &&
-          colIndex >= startCol &&
-          colIndex < startCol + furnitureWidth
-        ) {
-          // Set the cell to contain furniture info and position offsets
-          return {
-            model_name,
-            model_picture,
-            row: startRow,
-            col: startCol,
-            width: furnitureWidth,
-            height: furnitureHeight,
-            offsetX: colIndex - startCol,
-            offsetY: rowIndex - startRow
-          };
-        }
-        return cell;
-      })
-    );
+    const newFurniture = {
+      id: Date.now(),
+      model_name,
+      model_picture,
+      row: startRow,
+      col: startCol,
+      width: furnitureWidth,
+      height: furnitureHeight,
+      rotation: 0, // Add initial rotation
+    };
 
-    setGrid(newGrid);
+    onFurnitureAdd(newFurniture);
+  };
+
+  const isAreaOccupied = (startRow, startCol, width, height) => {
+    return furniturePositions.some(furniture => {
+      const furnitureEndRow = furniture.row + (furniture.rotation % 180 === 0 ? furniture.height : furniture.width);
+      const furnitureEndCol = furniture.col + (furniture.rotation % 180 === 0 ? furniture.width : furniture.height);
+      const newFurnitureEndRow = startRow + height;
+      const newFurnitureEndCol = startCol + width;
+
+      return (
+        startRow < furnitureEndRow &&
+        newFurnitureEndRow > furniture.row &&
+        startCol < furnitureEndCol &&
+        newFurnitureEndCol > furniture.col
+      );
+    });
+  };
+
+  const handleDragStop = (furnitureId, e, data) => {
+    const newRow = Math.round(data.y / 50);
+    const newCol = Math.round(data.x / 50);
+    const furniture = furniturePositions.find(f => f.id === furnitureId);
+
+    const rotatedWidth = furniture.rotation % 180 === 0 ? furniture.width : furniture.height;
+    const rotatedHeight = furniture.rotation % 180 === 0 ? furniture.height : furniture.width;
+
+    if (
+      newRow < 0 ||
+      newCol < 0 ||
+      newRow + rotatedHeight > rows ||
+      newCol + rotatedWidth > columns ||
+      isAreaOccupied(newRow, newCol, rotatedWidth, rotatedHeight)
+    ) {
+      return; // Prevent the move if it's invalid
+    }
+
+    onFurnitureMove(furnitureId, { row: newRow, col: newCol });
+  };
+
+  const handleRotate = (furnitureId) => {
+    const furniture = furniturePositions.find(f => f.id === furnitureId);
+    const newRotation = (furniture.rotation + 90) % 360;
+
+    const rotatedWidth = newRotation % 180 === 0 ? furniture.width : furniture.height;
+    const rotatedHeight = newRotation % 180 === 0 ? furniture.height : furniture.width;
+
+    if (
+      furniture.row + rotatedHeight > rows ||
+      furniture.col + rotatedWidth > columns ||
+      isAreaOccupied(furniture.row, furniture.col, rotatedWidth, rotatedHeight)
+    ) {
+      alert("Can't rotate here due to space constraints.");
+      return;
+    }
+
+    onFurnitureMove(furnitureId, { rotation: newRotation });
   };
 
   return (
-    <div className="grid" style={{ gridTemplateRows: `repeat(${rows}, 50px)`, gridTemplateColumns: `repeat(${columns}, 50px)` }}>
-      {grid.flatMap((row, rowIndex) =>
-        row.map((cell, colIndex) => (
+    <div 
+      className="grid-container"
+      style={{ 
+        width: `${columns * 50}px`, 
+        height: `${rows * 50}px`,
+      }}
+    >
+      <div 
+        className="grid"
+        style={{ 
+          gridTemplateColumns: `repeat(${columns}, 50px)`,
+          gridTemplateRows: `repeat(${rows}, 50px)`,
+        }}
+      >
+        {Array.from({ length: rows * columns }).map((_, index) => {
+          const rowIndex = Math.floor(index / columns);
+          const colIndex = index % columns;
+          return (
+            <div
+              key={`${rowIndex}-${colIndex}`}
+              className="grid-cell"
+              onClick={() => handleCellClick(rowIndex, colIndex)}
+            />
+          );
+        })}
+      </div>
+      {furniturePositions.map((furniture) => (
+        <Draggable
+          key={furniture.id}
+          bounds="parent"
+          grid={[50, 50]}
+          position={{ x: furniture.col * 50, y: furniture.row * 50 }}
+          onStop={(e, data) => handleDragStop(furniture.id, e, data)}
+        >
           <div
-            key={`${rowIndex}-${colIndex}`}
-            className={`grid-cell ${cell ? 'occupied' : ''}`}
-            onClick={() => handleCellClick(rowIndex, colIndex)}
+            className="furniture-item"
             style={{
-              backgroundImage: cell ? `url(${cell.model_picture})` : 'none',
-              backgroundSize: `${cell?.width * 50}px ${cell?.height * 50}px`,
-              backgroundPosition: cell ? `-${cell.offsetX * 50}px -${cell.offsetY * 50}px` : '0 0'
+              width: furniture.width * 50,
+              height: furniture.height * 50,
+              transform: `rotate(${furniture.rotation}deg)`,
+              backgroundImage: `url(${furniture.model_picture})`,
+              backgroundSize: 'cover',
+              position: 'absolute',
+              zIndex: 10,
+              cursor: 'move',
             }}
           >
-            {/* No need to render an <img> element anymore */}
+            <button
+              className="rotate-button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleRotate(furniture.id);
+              }}
+            >
+              <RotateCw size={16} />
+            </button>
           </div>
-        ))
-      )}
+        </Draggable>
+      ))}
     </div>
   );
 };
 
 export default Grid;
-
-
-// renders anticlockwise
-// |       |
-// |       |
-// |->------
