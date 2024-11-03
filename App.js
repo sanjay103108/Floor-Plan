@@ -1,4 +1,3 @@
-// App.js
 import React, { useState } from 'react';
 import Grid from './Grid';
 import FurnitureDropdown from './FurnitureDropdown';
@@ -9,7 +8,7 @@ function App() {
   const [selectedFurniture, setSelectedFurniture] = useState(null);
   const [roomWidth, setRoomWidth] = useState(500);
   const [roomHeight, setRoomHeight] = useState(500);
-  const [gridHistory, setGridHistory] = useState([]);
+  const [furniturePositions, setFurniturePositions] = useState([]);
   
   const handleFurnitureSelect = (modelName) => {
     const furnitureData = models[modelName];
@@ -26,14 +25,32 @@ function App() {
     }
   };
 
-  const handleUndo = () => {
-    if (gridHistory.length > 0) {
-      const newHistory = [...gridHistory];
-      const previousGrid = newHistory.pop();
-      setGridHistory(newHistory);
-      return previousGrid;
-    }
-    return null;
+  const handleFurnitureAdd = (newFurniture) => {
+    const updatedModels = { ...models };
+    const { model_name, row, col } = newFurniture;
+
+    updatedModels[model_name].placedPositions = { row: row + 1, col: col + 1 };
+
+    console.log(`Placed ${model_name} at row: ${row + 1}, col: ${col + 1}`);
+    console.log(updatedModels);
+
+    setFurniturePositions([...furniturePositions, newFurniture]);
+  };
+
+  const handleFurnitureMove = (id, newPosition) => {
+    const updatedPositions = furniturePositions.map((furniture) =>
+      furniture.id === id ? { ...furniture, ...newPosition } : furniture
+    );
+
+    setFurniturePositions(updatedPositions);
+
+    const movedFurniture = updatedPositions.find(furniture => furniture.id === id);
+    const { model_name, row, col, rotation } = movedFurniture;
+
+    models[model_name].placedPositions = { row, col, rotation };
+
+    console.log(`Moved/Rotated ${model_name} to row: ${row+1}, col: ${col+1}, rotation: ${rotation}`);
+    console.log(models);
   };
 
   return (
@@ -43,20 +60,13 @@ function App() {
         <FurnitureDropdown models={models} onSelect={handleFurnitureSelect} />
       </div>
       <div className="main-content">
-        {/* <div className="toolbar">
-          <button onClick={handleUndo}>↻</button>
-          <button>💾</button>
-          <button>📂</button>
-          <button>📐</button>
-          <button>✏️</button>
-          <button>📏</button>
-        </div> */}
         <Grid 
           width={roomWidth} 
           height={roomHeight} 
           selectedFurniture={selectedFurniture}
-          onGridUpdate={(grid) => setGridHistory([...gridHistory, grid])}
-          onUndo={handleUndo}
+          furniturePositions={furniturePositions}
+          onFurnitureAdd={handleFurnitureAdd}
+          onFurnitureMove={handleFurnitureMove}
         />
       </div>
       <div className="properties-panel">
